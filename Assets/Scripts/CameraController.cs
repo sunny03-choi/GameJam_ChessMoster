@@ -33,8 +33,8 @@ public class CameraController : MonoBehaviour
 
         Vector3 pos = cam.transform.localPosition;
 
-        pos.y = scroll * zoomSpeed;
-        pos.z = scroll * zoomSpeed;
+        pos.y -= scroll * zoomSpeed;
+        pos.z += scroll * zoomSpeed;
 
         pos.y = Mathf.Clamp(pos.y, minZoom, maxZoom);
 
