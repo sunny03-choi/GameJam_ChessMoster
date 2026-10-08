@@ -6085,6 +6085,7 @@ MonoBehaviour:
   _tilePrefab: {fileID: 0}
   _boardMaterial: {fileID: 0}
   _fallFloorY: -5
+  _currentPreset: 0
   _serializedTiles:
   - {fileID: 2558763623349620233}
   - {fileID: 6260856788417026620}

@@ -71,6 +71,39 @@ namespace ChessMonsters.Grid.Editor
                     }
                 }
             }
+
+            EditorGUILayout.Space(6);
+            EditorGUILayout.LabelField("기획서 명세: 정해진 지형 프리셋", EditorStyles.miniBoldLabel);
+            using (new EditorGUILayout.HorizontalScope())
+            {
+                if (GUILayout.Button("1. 기본 평원"))
+                {
+                    Undo.RegisterFullObjectHierarchyUndo(manager.gameObject, "Apply Default Plain Preset");
+                    manager.ApplyFieldPreset(FieldPresetType.DefaultPlain);
+                    EditorUtility.SetDirty(manager);
+                }
+                if (GUILayout.Button("2. 강/호수 지형"))
+                {
+                    Undo.RegisterFullObjectHierarchyUndo(manager.gameObject, "Apply River Preset");
+                    manager.ApplyFieldPreset(FieldPresetType.RiverField);
+                    EditorUtility.SetDirty(manager);
+                }
+            }
+            using (new EditorGUILayout.HorizontalScope())
+            {
+                if (GUILayout.Button("3. 고지대 단차 지형"))
+                {
+                    Undo.RegisterFullObjectHierarchyUndo(manager.gameObject, "Apply Highland Preset");
+                    manager.ApplyFieldPreset(FieldPresetType.HighlandField);
+                    EditorUtility.SetDirty(manager);
+                }
+                if (GUILayout.Button("4. 습지 지형"))
+                {
+                    Undo.RegisterFullObjectHierarchyUndo(manager.gameObject, "Apply Marsh Preset");
+                    manager.ApplyFieldPreset(FieldPresetType.MarshField);
+                    EditorUtility.SetDirty(manager);
+                }
+            }
         }
     }
 }

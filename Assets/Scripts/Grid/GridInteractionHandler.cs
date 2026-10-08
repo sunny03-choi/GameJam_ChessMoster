@@ -136,6 +136,12 @@ namespace ChessMonsters.Grid
                 }
             }
 
+            // 숫자 1~4 키: 기획서 "정해진 지형" 프리셋 즉시 전환
+            if (WasKeyJustPressed(KeyCode.Alpha1)) { GridManager.Instance.ApplyFieldPreset(FieldPresetType.DefaultPlain); ClearSelection(); }
+            if (WasKeyJustPressed(KeyCode.Alpha2)) { GridManager.Instance.ApplyFieldPreset(FieldPresetType.RiverField); ClearSelection(); }
+            if (WasKeyJustPressed(KeyCode.Alpha3)) { GridManager.Instance.ApplyFieldPreset(FieldPresetType.HighlandField); ClearSelection(); }
+            if (WasKeyJustPressed(KeyCode.Alpha4)) { GridManager.Instance.ApplyFieldPreset(FieldPresetType.MarshField); ClearSelection(); }
+
             // Space 키: 모든 타일 리셋 / 복구
             if (WasKeyJustPressed(KeyCode.Space))
             {
@@ -257,6 +263,14 @@ namespace ChessMonsters.Grid
                         return UnityEngine.InputSystem.Keyboard.current.fKey.wasPressedThisFrame;
                     case KeyCode.Space:
                         return UnityEngine.InputSystem.Keyboard.current.spaceKey.wasPressedThisFrame;
+                    case KeyCode.Alpha1:
+                        return UnityEngine.InputSystem.Keyboard.current.digit1Key.wasPressedThisFrame;
+                    case KeyCode.Alpha2:
+                        return UnityEngine.InputSystem.Keyboard.current.digit2Key.wasPressedThisFrame;
+                    case KeyCode.Alpha3:
+                        return UnityEngine.InputSystem.Keyboard.current.digit3Key.wasPressedThisFrame;
+                    case KeyCode.Alpha4:
+                        return UnityEngine.InputSystem.Keyboard.current.digit4Key.wasPressedThisFrame;
                 }
             }
 #endif
@@ -268,19 +282,25 @@ namespace ChessMonsters.Grid
         {
             if (!_showDebugGUI) return;
 
-            GUI.Box(new Rect(15, 15, 340, 230), "♟ 체스 몬스터즈 그리드 시스템 테스터");
+            GUI.Box(new Rect(15, 15, 360, 260), "♟ 체스 몬스터즈 그리드 시스템 테스터");
 
-            GUILayout.BeginArea(new Rect(25, 45, 320, 190));
+            GUILayout.BeginArea(new Rect(25, 45, 340, 220));
             GUILayout.Label("• <b>좌클릭</b>: 타일 선택 (이동/사거리 범위 표시)");
             GUILayout.Label("• <b>우클릭</b>: 타일 파괴(추락 연출)");
-            GUILayout.Label("• <b>W 키</b>: 마우스 위치 칸을 '물' 칸으로 토글");
-            GUILayout.Label("• <b>O 키</b>: 장애물 칸으로 토글");
-            GUILayout.Label($"• <b>F 키</b>: 비행 유닛 모드 토글 (현재: {(_testFlyingUnit ? "<color=cyan>비행(물 통과)</color>" : "지상")})");
-            GUILayout.Label("• <b>Space 키</b>: 모든 파괴된 타일 복구");
+            GUILayout.Label("• <b>W 키</b>: '물' 칸 토글 | <b>O 키</b>: '장애물' 토글");
+            GUILayout.Label($"• <b>F 키</b>: 비행 모드 (현재: {(_testFlyingUnit ? "<color=cyan>비행(물 통과)</color>" : "지상")})");
+            GUILayout.Label("• <b>숫자 1~4</b>: 기획서 지형 프리셋 전환");
+            GUILayout.Label("  (1:기본평원, 2:강/호수, 3:고지대단차, 4:습지)");
+            GUILayout.Label("• <b>Space 키</b>: 모든 타일 복구");
+
+            if (GridManager.Instance != null)
+            {
+                GUILayout.Label($"<b>현재 지형:</b> <color=yellow>{GridManager.Instance.CurrentPreset}</color>");
+            }
 
             if (_hoveredTile != null)
             {
-                GUILayout.Space(6);
+                GUILayout.Space(4);
                 GUILayout.Label($"<b>호버 타일:</b> {_hoveredTile.Coord} | 타입: {_hoveredTile.Type} | Y: {_hoveredTile.Height:F1}");
             }
 

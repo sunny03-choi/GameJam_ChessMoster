@@ -29,6 +29,9 @@ namespace ChessMonsters.Grid
         [Header("Fall Floor Y")]
         [SerializeField] private float _fallFloorY = -5.0f;
 
+        [Header("Field Preset (정해진 지형)")]
+        [SerializeField] private FieldPresetType _currentPreset = FieldPresetType.DefaultPlain;
+
         [SerializeField, HideInInspector]
         private Tile[] _serializedTiles = new Tile[BoardWidth * BoardHeight];
 
@@ -37,6 +40,7 @@ namespace ChessMonsters.Grid
         public float TileSize => _tileSize;
         public float TileSpacing => _tileSpacing;
         public float FallFloorY => _fallFloorY;
+        public FieldPresetType CurrentPreset => _currentPreset;
 
         private void Awake()
         {
@@ -58,6 +62,11 @@ namespace ChessMonsters.Grid
             if (Application.isPlaying && GetTileCount() == 0)
             {
                 GenerateGrid();
+            }
+
+            if (Application.isPlaying && _currentPreset != FieldPresetType.DefaultPlain)
+            {
+                ApplyFieldPreset(_currentPreset);
             }
         }
 
@@ -113,6 +122,86 @@ namespace ChessMonsters.Grid
             }
 
             Debug.Log("[GridManager] 7x7 체스판 그리드 오브젝트(총 49칸) 생성 완료.");
+        }
+
+        /// <summary>
+        /// 기획서 명세: "7×7의 공간을 가지고 있으며 정해진 지형이 존재한다."
+        /// 정해진 지형 프리셋(기본 평원, 강/호수, 고지대 단차, 습지)을 필드에 적용합니다.
+        /// </summary>
+        public void ApplyFieldPreset(FieldPresetType preset)
+        {
+            _currentPreset = preset;
+            if (_grid == null || _grid.GetLength(0) != BoardWidth) RebuildGridFromChildren();
+
+            // 1. 모든 타일을 기본 일반 상태(높이 0, 파괴 복구)로 초기화
+            for (int z = 0; z < BoardHeight; z++)
+            {
+                for (int x = 0; x < BoardWidth; x++)
+                {
+                    Tile tile = GetTile(x, z);
+                    if (tile != null)
+                    {
+                        tile.RestoreTile(TileType.Normal, false);
+                        tile.SetHeight(0f);
+                    }
+                }
+            }
+
+            // 2. 프리셋별 특수 지형 적용
+            switch (preset)
+            {
+                case FieldPresetType.RiverField:
+                    // 강/호수 지형: 중앙(Z = 3)이 물로 채워지고, 특정 칸(X = 1, X = 5)에 건널 수 있는 여울/다리 형성
+                    for (int x = 0; x < BoardWidth; x++)
+                    {
+                        if (x != 1 && x != 5)
+                        {
+                            Tile t = GetTile(x, 3);
+                            if (t != null) t.SetTileType(TileType.Water);
+                        }
+                    }
+                    break;
+
+                case FieldPresetType.HighlandField:
+                    // 고지대 지형: 중앙 3x3 영역(X: 2~4, Z: 2~4)이 단차(높이 1.0f)로 솟아 있음
+                    // 기획서의 필드 파괴 시 낙하 높이에 비례한 추락 피해 및 비행 유닛의 고저차 무시 특성을 체감할 수 있는 3D 입체 전장
+                    for (int z = 2; z <= 4; z++)
+                    {
+                        for (int x = 2; x <= 4; x++)
+                        {
+                            Tile t = GetTile(x, z);
+                            if (t != null)
+                            {
+                                t.SetHeight(1.0f);
+                            }
+                        }
+                    }
+                    Tile obs1 = GetTile(0, 0); if (obs1 != null) obs1.SetTileType(TileType.Obstacle);
+                    Tile obs2 = GetTile(6, 6); if (obs2 != null) obs2.SetTileType(TileType.Obstacle);
+                    break;
+
+                case FieldPresetType.MarshField:
+                    // 습지 지형: 징검다리 형태로 물 칸들이 곳곳에 분산 배치됨
+                    Vector2Int[] waterCoords = new Vector2Int[]
+                    {
+                        new Vector2Int(1, 1), new Vector2Int(5, 1),
+                        new Vector2Int(2, 3), new Vector2Int(3, 3), new Vector2Int(4, 3),
+                        new Vector2Int(1, 5), new Vector2Int(5, 5)
+                    };
+                    foreach (var wc in waterCoords)
+                    {
+                        Tile t = GetTile(wc.x, wc.y);
+                        if (t != null) t.SetTileType(TileType.Water);
+                    }
+                    break;
+
+                case FieldPresetType.DefaultPlain:
+                default:
+                    // 기본 평평한 7x7 체스판
+                    break;
+            }
+
+            Debug.Log($"[GridManager] 지형 프리셋 적용 완료: {preset}");
         }
 
         private Tile CreateTileObject(int x, int z, Vector3 localPos)
