@@ -23,4 +23,16 @@ namespace ChessMonsters.Grid
         Attackable,     // 공격 가능한 사거리 (빨간색 계열)
         Spawnable       // 소환 가능한 위치 (노란색/시안색 계열)
     }
+
+    /// <summary>
+    /// 기획서 명세: "7×7의 공간을 가지고 있으며 정해진 지형이 존재한다."
+    /// 턴제 전략 보드에서 사용 가능한 지형 프리셋 종류
+    /// </summary>
+    public enum FieldPresetType
+    {
+        DefaultPlain,   // 1. 기본 평원 (7x7 표준 체스판)
+        RiverField,     // 2. 강/호수 지형 (중앙 강줄기 물 칸 + 여울목 다리)
+        HighlandField,  // 3. 고지대 지형 (중앙 3x3 고지대 단차 + 낙하 피해 실현)
+        MarshField      // 4. 습지 지형 (분산된 물 웅덩이 지형)
+    }
 }
