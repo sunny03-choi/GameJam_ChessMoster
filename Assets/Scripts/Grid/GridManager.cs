@@ -3,6 +3,15 @@ using UnityEngine;
 
 namespace ChessMonsters.Grid
 {
+    public enum TilePlacementMode
+    {
+        [Tooltip("체스판 교차 패턴 (밝은 칸: 잔디, 어두운 칸: 흙)")]
+        Checkerboard,
+
+        [Tooltip("자연스러운 무작위 잔디 배치 (비율 및 시드 기반)")]
+        RandomGrass
+    }
+
     /// <summary>
     /// 7x7 체스판 그리드를 생성하고 관리하는 매니저 클래스
     /// </summary>
@@ -16,14 +25,56 @@ namespace ChessMonsters.Grid
 
         [Header("Grid Layout Settings")]
         [SerializeField] private float _tileSize = 1.0f;
-        [SerializeField] private float _tileThickness = 0.3f;
+        [Tooltip("타일 높이/두께 (1.0 = 완벽한 정육면체 큐브, 0.3 = 납작한 슬랩 타일)")]
+        [SerializeField] private float _tileThickness = 1.0f;
         [SerializeField] private float _tileSpacing = 0.04f;
 
+        [Header("Tile Placement (잔디 및 지형 배치 설정)")]
+        [Tooltip("타일 배치 모드: 체스판 교차 배치 또는 랜덤 잔디 배치")]
+        [SerializeField] private TilePlacementMode _placementMode = TilePlacementMode.RandomGrass;
+
+        [Tooltip("랜덤 시드 (0이면 생성 시 무작위 시드 사용)")]
+        [SerializeField] private int _randomSeed = 0;
+
+        [Tooltip("랜덤 배치 시 잔디 타일의 비율 (0 ~ 1)")]
+        [Range(0f, 1f)]
+        [SerializeField] private float _grassRatio = 0.65f;
+
+        [Tooltip("잔디 타일 중 꽃이 핀 잔디의 비율 (0 ~ 1)")]
+        [Range(0f, 1f)]
+        [SerializeField] private float _flowerGrassRatio = 0.35f;
+
+        [Tooltip("흙길 타일 중 풀 테두리 흙길의 비율 (0 ~ 1)")]
+        [Range(0f, 1f)]
+        [SerializeField] private float _dirtGrassRatio = 0.40f;
+
+        [Tooltip("타일을 90도 단위로 무작위 회전하여 텍스처 반복 느낌 완화")]
+        [SerializeField] private bool _randomizeRotation = true;
+
         [Header("Tile Prefab (Optional)")]
-        [Tooltip("지정하지 않으면 3D 큐브 타일이 자동으로 절차적 생성됩니다.")]
+        [Tooltip("지정하지 않으면 윗면 잔디 + 5면 흙 2-Submesh 3D 큐브 타일이 자동으로 절차적 생성됩니다.")]
         [SerializeField] private GameObject _tilePrefab;
 
-        [Header("Default Materials (Optional)")]
+        [Header("Tile Materials (URP Textures)")]
+        [Tooltip("풀밭 기본 머티리얼 (Tile_Grass_04)")]
+        [SerializeField] private Material _lightTileMaterial;
+
+        [Tooltip("꽃이 핀 풀밭 머티리얼 (Tile_GrassFlowers_03)")]
+        [SerializeField] private Material _lightTileVariationMaterial;
+
+        [Tooltip("흙길 기본 머티리얼 (Tile_Dirt_01)")]
+        [SerializeField] private Material _darkTileMaterial;
+
+        [Tooltip("잔디 테두리 흙길 머티리얼 (Tile_DirtGrass_02)")]
+        [SerializeField] private Material _darkTileVariationMaterial;
+
+        [Tooltip("물 타일 머티리얼")]
+        [SerializeField] private Material _waterMaterial;
+
+        [Tooltip("장애물 타일 머티리얼")]
+        [SerializeField] private Material _obstacleMaterial;
+
+        [Header("Default Materials (Fallback)")]
         [SerializeField] private Material _boardMaterial;
 
         [Header("Fall Floor Y")]
@@ -41,6 +92,59 @@ namespace ChessMonsters.Grid
         public float TileSpacing => _tileSpacing;
         public float FallFloorY => _fallFloorY;
         public FieldPresetType CurrentPreset => _currentPreset;
+
+        public Material LightTileMaterial => _lightTileMaterial;
+        public Material LightTileVariationMaterial => _lightTileVariationMaterial;
+        public Material DarkTileMaterial => _darkTileMaterial;
+        public Material DarkTileVariationMaterial => _darkTileVariationMaterial;
+        public Material WaterMaterial => _waterMaterial;
+        public Material ObstacleMaterial => _obstacleMaterial;
+
+        public float TileThickness
+        {
+            get => _tileThickness;
+            set => _tileThickness = value;
+        }
+
+        public TilePlacementMode PlacementMode
+        {
+            get => _placementMode;
+            set => _placementMode = value;
+        }
+
+        public int RandomSeed
+        {
+            get => _randomSeed;
+            set => _randomSeed = value;
+        }
+
+        /// <summary>
+        /// 타일 두께(높이) 변경 및 그리드 재생성 (1.0f = 정육면체 큐브, 0.3f = 슬랩)
+        /// </summary>
+        public void SetTileThickness(float thickness)
+        {
+            _tileThickness = thickness;
+            GenerateGrid();
+        }
+
+        /// <summary>
+        /// 잔디를 자연스럽게 랜덤 재배치 (새로운 시드 생성)
+        /// </summary>
+        public void RandomizeGrassPlacement(int newSeed = 0)
+        {
+            _placementMode = TilePlacementMode.RandomGrass;
+            _randomSeed = (newSeed != 0) ? newSeed : UnityEngine.Random.Range(1, 999999);
+            GenerateGrid();
+        }
+
+        /// <summary>
+        /// 체스판 체크무늬 교차 배치로 복원
+        /// </summary>
+        public void SetCheckerboardPlacement()
+        {
+            _placementMode = TilePlacementMode.Checkerboard;
+            GenerateGrid();
+        }
 
         private void Awake()
         {
@@ -94,8 +198,14 @@ namespace ChessMonsters.Grid
         [ContextMenu("7x7 그리드 생성 (Generate Grid)")]
         public void GenerateGrid()
         {
+#if UNITY_EDITOR
+            SetupDefaultMaterialsIfNull();
+#endif
             ClearGrid();
             _grid = new Tile[BoardWidth, BoardHeight];
+
+            int activeSeed = _randomSeed != 0 ? _randomSeed : UnityEngine.Random.Range(1, 999999);
+            System.Random rnd = new System.Random(activeSeed);
 
             // 7x7 중앙 정렬 오프셋
             float step = _tileSize + _tileSpacing;
@@ -112,16 +222,13 @@ namespace ChessMonsters.Grid
                         z * step - offsetZ
                     );
 
-                    Tile tile = CreateTileObject(x, z, localPos);
-                    bool isDark = (x + z) % 2 == 1; // 체스판 체크무늬
-                    tile.Initialize(new Vector2Int(x, z), isDark, 0f, TileType.Normal);
-
+                    Tile tile = CreateTileObject(x, z, localPos, rnd);
                     _grid[x, z] = tile;
                     _serializedTiles[z * BoardWidth + x] = tile;
                 }
             }
 
-            Debug.Log("[GridManager] 7x7 체스판 그리드 오브젝트(총 49칸) 생성 완료.");
+            Debug.Log($"[GridManager] 7x7 체스판 그리드 오브젝트(총 49칸) 생성 완료. (모드: {_placementMode}, 두께: {_tileThickness:F1}, 시드: {activeSeed})");
         }
 
         /// <summary>
@@ -204,7 +311,7 @@ namespace ChessMonsters.Grid
             Debug.Log($"[GridManager] 지형 프리셋 적용 완료: {preset}");
         }
 
-        private Tile CreateTileObject(int x, int z, Vector3 localPos)
+        private Tile CreateTileObject(int x, int z, Vector3 localPos, System.Random rnd = null)
         {
             GameObject tileObj;
 
@@ -218,14 +325,34 @@ namespace ChessMonsters.Grid
             }
             else
             {
-                // 프리팹이 없을 경우 기본 3D 큐브로 자동 생성
-                tileObj = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                // 윗면(잔디)과 나머지 5면(흙)을 분리 렌더링하기 위한 2-Submesh 3D 정육면체 큐브 생성
+                tileObj = new GameObject($"Tile_{x}_{z}");
                 tileObj.transform.SetParent(transform);
+
+                MeshFilter filter = tileObj.AddComponent<MeshFilter>();
+                filter.sharedMesh = TileMeshUtility.GetOrCreateTwoSubmeshCubeMesh();
+
+                tileObj.AddComponent<MeshRenderer>();
+
+                BoxCollider bc = tileObj.AddComponent<BoxCollider>();
+                bc.size = Vector3.one;
             }
 
             tileObj.name = $"Tile_{x}_{z}";
             tileObj.transform.localPosition = localPos;
-            tileObj.transform.localRotation = Quaternion.identity;
+
+            // 텍스처 반복 느낌을 완화하기 위해 90도 단위 무작위 회전
+            if (_randomizeRotation && rnd != null)
+            {
+                int rotY = rnd.Next(0, 4) * 90;
+                tileObj.transform.localRotation = Quaternion.Euler(0f, rotY, 0f);
+            }
+            else
+            {
+                tileObj.transform.localRotation = Quaternion.identity;
+            }
+
+            // 1.0 x 1.0 x 1.0 완벽한 정육면체 큐브 스케일
             tileObj.transform.localScale = new Vector3(_tileSize, _tileThickness, _tileSize);
 
             Tile tile = tileObj.GetComponent<Tile>();
@@ -234,29 +361,100 @@ namespace ChessMonsters.Grid
                 tile = tileObj.AddComponent<Tile>();
             }
 
-            // 머티리얼 설정
-            MeshRenderer mr = tileObj.GetComponent<MeshRenderer>();
-            if (mr != null)
+            // 1. 윗면(Top Face) 머티리얼 결정
+            Material topMat = null;
+            bool isDark = (x + z) % 2 == 1;
+
+            if (_placementMode == TilePlacementMode.RandomGrass && rnd != null)
             {
-                if (_boardMaterial != null)
+                // 랜덤 잔디 배치: _grassRatio 확률로 잔디, 나머지 확률로 흙길
+                bool isGrass = (float)rnd.NextDouble() < _grassRatio;
+                if (isGrass)
                 {
-                    mr.sharedMaterial = _boardMaterial;
+                    bool isFlower = (float)rnd.NextDouble() < _flowerGrassRatio;
+                    topMat = (isFlower && _lightTileVariationMaterial != null)
+                        ? _lightTileVariationMaterial
+                        : _lightTileMaterial;
                 }
                 else
                 {
-                    // 기본 스탠다드 머티리얼 적용
-                    Shader shader = Shader.Find("Standard") ?? Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Sprites/Default");
-                    if (shader != null)
-                    {
-                        Material mat = new Material(shader);
-                        mat.name = "Tile_Default_Mat";
-                        mr.sharedMaterial = mat;
-                    }
+                    bool isBorderDirt = (float)rnd.NextDouble() < _dirtGrassRatio;
+                    topMat = (isBorderDirt && _darkTileVariationMaterial != null)
+                        ? _darkTileVariationMaterial
+                        : _darkTileMaterial;
+                }
+            }
+            else
+            {
+                // 체스판 체크무늬 배치
+                if (isDark)
+                {
+                    topMat = ((x + 2 * z) % 3 == 0 && _darkTileVariationMaterial != null)
+                        ? _darkTileVariationMaterial
+                        : _darkTileMaterial;
+                }
+                else
+                {
+                    topMat = ((x * 3 + z * 5) % 4 == 0 && _lightTileVariationMaterial != null)
+                        ? _lightTileVariationMaterial
+                        : _lightTileMaterial;
                 }
             }
 
+            if (topMat == null) topMat = _boardMaterial;
+
+            // 2. 나머지 5면(옆면 4면 + 밑면)은 항상 일반 흙(Tile_Dirt_01) 머티리얼 적용
+            Material sideMat = _darkTileMaterial ?? _boardMaterial;
+
+            // URP Lit 안전 폴백 (분홍색 셰이더 에러 방지)
+            if (topMat == null || sideMat == null)
+            {
+                Shader shader = Shader.Find("Universal Render Pipeline/Lit")
+                             ?? Shader.Find("Universal Render Pipeline/Simple Lit")
+                             ?? Shader.Find("Universal Render Pipeline/Unlit")
+                             ?? Shader.Find("Standard");
+                Material fallbackMat = new Material(shader) { name = "Tile_Runtime_Fallback_Mat" };
+                if (topMat == null) topMat = fallbackMat;
+                if (sideMat == null) sideMat = fallbackMat;
+            }
+
+            MeshRenderer mr = tileObj.GetComponent<MeshRenderer>();
+            MeshFilter mf = tileObj.GetComponent<MeshFilter>();
+            if (mr != null)
+            {
+                // 2-Submesh 메시일 경우 [Submesh 0 = 흙, Submesh 1 = 잔디] 슬롯에 각 머티리얼 바인딩
+                if (mf != null && mf.sharedMesh != null && mf.sharedMesh.subMeshCount >= 2)
+                {
+                    mr.sharedMaterials = new Material[] { sideMat, topMat };
+                }
+                else
+                {
+                    mr.sharedMaterial = topMat;
+                }
+            }
+
+            tile.Initialize(new Vector2Int(x, z), isDark, 0f, TileType.Normal, topMat, sideMat);
+
             return tile;
         }
+
+#if UNITY_EDITOR
+        public void SetupDefaultMaterialsIfNull()
+        {
+            if (_lightTileMaterial == null)
+                _lightTileMaterial = UnityEditor.AssetDatabase.LoadAssetAtPath<Material>("Assets/Materials/Tiles/Mat_Tile_Grass_04.mat");
+            if (_lightTileVariationMaterial == null)
+                _lightTileVariationMaterial = UnityEditor.AssetDatabase.LoadAssetAtPath<Material>("Assets/Materials/Tiles/Mat_Tile_GrassFlowers_03.mat");
+            if (_darkTileMaterial == null)
+                _darkTileMaterial = UnityEditor.AssetDatabase.LoadAssetAtPath<Material>("Assets/Materials/Tiles/Mat_Tile_Dirt_01.mat");
+            if (_darkTileVariationMaterial == null)
+                _darkTileVariationMaterial = UnityEditor.AssetDatabase.LoadAssetAtPath<Material>("Assets/Materials/Tiles/Mat_Tile_DirtGrass_02.mat");
+            if (_waterMaterial == null)
+                _waterMaterial = UnityEditor.AssetDatabase.LoadAssetAtPath<Material>("Assets/Materials/Tiles/Mat_Tile_Water.mat");
+            if (_obstacleMaterial == null)
+                _obstacleMaterial = UnityEditor.AssetDatabase.LoadAssetAtPath<Material>("Assets/Materials/Tiles/Mat_Tile_Obstacle.mat");
+        }
+#endif
 
         /// <summary>
         /// 보드의 모든 타일 제거

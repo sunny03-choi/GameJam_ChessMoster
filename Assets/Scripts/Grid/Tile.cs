@@ -23,18 +23,16 @@ namespace ChessMonsters.Grid
         [Header("Visual Components")]
         [SerializeField] private MeshRenderer _meshRenderer;
         [SerializeField] private BoxCollider _boxCollider;
+        [SerializeField] private Material _topMaterial;
+        [SerializeField] private Material _sideMaterial;
 
         // 색상 프리셋 (에디터/런타임에서 자동 초기화)
-        private Color _baseColor;
-        private static readonly Color ColorLight = new Color(0.92f, 0.90f, 0.85f);     // 체스판 밝은 칸
-        private static readonly Color ColorDark = new Color(0.45f, 0.40f, 0.35f);      // 체스판 어두운 칸
-        private static readonly Color ColorWater = new Color(0.20f, 0.55f, 0.85f);     // 물 칸
-        private static readonly Color ColorObstacle = new Color(0.30f, 0.30f, 0.30f);  // 장애물 칸
-        private static readonly Color ColorHover = new Color(1.0f, 0.95f, 0.5f);       // 마우스 호버 (연노랑)
-        private static readonly Color ColorSelected = new Color(1.0f, 0.8f, 0.0f);     // 선택됨 (골드)
-        private static readonly Color ColorMovable = new Color(0.3f, 0.85f, 1.0f);     // 이동 가능 범위 (하늘색)
-        private static readonly Color ColorAttackable = new Color(1.0f, 0.3f, 0.3f);   // 공격 사거리 (빨강)
-        private static readonly Color ColorSpawnable = new Color(0.4f, 1.0f, 0.5f);    // 소환 가능 (초록)
+        private Color _baseColor = Color.white;
+        private static readonly Color ColorHover = new Color(1.0f, 0.95f, 0.4f);       // 마우스 호버 (연노랑)
+        private static readonly Color ColorSelected = new Color(1.0f, 0.82f, 0.1f);    // 선택됨 (골드)
+        private static readonly Color ColorMovable = new Color(0.35f, 0.85f, 1.0f);    // 이동 가능 범위 (하늘색)
+        private static readonly Color ColorAttackable = new Color(1.0f, 0.35f, 0.35f);  // 공격 사거리 (빨강)
+        private static readonly Color ColorSpawnable = new Color(0.45f, 1.0f, 0.55f);   // 소환 가능 (초록)
 
         private MaterialPropertyBlock _propBlock;
         private TileHighlightState _currentHighlight = TileHighlightState.None;
@@ -57,40 +55,84 @@ namespace ChessMonsters.Grid
         {
             if (_meshRenderer == null) _meshRenderer = GetComponentInChildren<MeshRenderer>();
             if (_boxCollider == null) _boxCollider = GetComponentInChildren<BoxCollider>();
+            if (_meshRenderer != null)
+            {
+                Material[] mats = _meshRenderer.sharedMaterials;
+                if (mats != null && mats.Length >= 2)
+                {
+                    if (_sideMaterial == null) _sideMaterial = mats[0];
+                    if (_topMaterial == null) _topMaterial = mats[1];
+                }
+                else if (mats != null && mats.Length == 1 && _topMaterial == null)
+                {
+                    _topMaterial = mats[0];
+                }
+            }
             _propBlock = new MaterialPropertyBlock();
             _originalLocalPos = transform.localPosition;
         }
 
         /// <summary>
-        /// 타일 기본 설정 초기화
+        /// 타일 기본 설정 초기화 (윗면 머티리얼과 측면/밑면 머티리얼 지원)
         /// </summary>
-        public void Initialize(Vector2Int coord, bool isDark, float height = 0f, TileType initialType = TileType.Normal)
+        public void Initialize(Vector2Int coord, bool isDark, float height = 0f, TileType initialType = TileType.Normal, Material topMat = null, Material sideMat = null)
         {
+            if (_meshRenderer == null) _meshRenderer = GetComponentInChildren<MeshRenderer>();
+            if (_boxCollider == null) _boxCollider = GetComponentInChildren<BoxCollider>();
+
             _coord = coord;
             _isDarkSquare = isDark;
             _height = height;
-            _type = initialType;
             _isDestroyed = false;
             _originalLocalPos = transform.localPosition;
 
-            UpdateBaseColor();
-            ApplyHighlightColor();
+            if (topMat != null) _topMaterial = topMat;
+            if (sideMat != null) _sideMaterial = sideMat;
+
+            SetTileType(initialType);
         }
 
-        private void UpdateBaseColor()
+        private void UpdateVisualsForType()
         {
+            if (_meshRenderer == null) return;
+
+            Material currentSide = _sideMaterial;
+            Material currentTop = _topMaterial;
+
             switch (_type)
             {
                 case TileType.Water:
-                    _baseColor = ColorWater;
+                    if (GridManager.Instance != null && GridManager.Instance.WaterMaterial != null)
+                    {
+                        currentTop = GridManager.Instance.WaterMaterial;
+                    }
+                    _baseColor = Color.white;
                     break;
+
                 case TileType.Obstacle:
-                    _baseColor = ColorObstacle;
+                    if (GridManager.Instance != null && GridManager.Instance.ObstacleMaterial != null)
+                    {
+                        currentTop = GridManager.Instance.ObstacleMaterial;
+                    }
+                    _baseColor = Color.white;
                     break;
+
                 case TileType.Normal:
                 default:
-                    _baseColor = _isDarkSquare ? ColorDark : ColorLight;
+                    currentTop = _topMaterial;
+                    _baseColor = Color.white;
                     break;
+            }
+
+            // 2-Submesh 큐브 지원: Submesh 0(측면/밑면) = 흙, Submesh 1(윗면) = 잔디/특수
+            MeshFilter mf = GetComponentInChildren<MeshFilter>();
+            if (currentSide != null && currentTop != null && (mf == null || mf.sharedMesh == null || mf.sharedMesh.subMeshCount >= 2))
+            {
+                _meshRenderer.sharedMaterials = new Material[] { currentSide, currentTop };
+            }
+            else if (currentTop != null)
+            {
+                _meshRenderer.sharedMaterial = currentTop;
             }
         }
 
@@ -100,7 +142,7 @@ namespace ChessMonsters.Grid
         public void SetTileType(TileType newType)
         {
             _type = newType;
-            UpdateBaseColor();
+            UpdateVisualsForType();
             ApplyHighlightColor();
         }
 
@@ -139,25 +181,29 @@ namespace ChessMonsters.Grid
             switch (_currentHighlight)
             {
                 case TileHighlightState.Hovered:
-                    targetColor = Color.Lerp(_baseColor, ColorHover, 0.6f);
+                    targetColor = Color.Lerp(_baseColor, ColorHover, 0.45f);
                     break;
                 case TileHighlightState.Selected:
-                    targetColor = ColorSelected;
+                    targetColor = Color.Lerp(_baseColor, ColorSelected, 0.65f);
                     break;
                 case TileHighlightState.Movable:
-                    targetColor = Color.Lerp(_baseColor, ColorMovable, 0.65f);
+                    targetColor = Color.Lerp(_baseColor, ColorMovable, 0.55f);
                     break;
                 case TileHighlightState.Attackable:
-                    targetColor = Color.Lerp(_baseColor, ColorAttackable, 0.7f);
+                    targetColor = Color.Lerp(_baseColor, ColorAttackable, 0.65f);
                     break;
                 case TileHighlightState.Spawnable:
-                    targetColor = Color.Lerp(_baseColor, ColorSpawnable, 0.65f);
+                    targetColor = Color.Lerp(_baseColor, ColorSpawnable, 0.55f);
+                    break;
+                case TileHighlightState.None:
+                default:
+                    targetColor = _baseColor;
                     break;
             }
 
             _meshRenderer.GetPropertyBlock(_propBlock);
             _propBlock.SetColor("_Color", targetColor);
-            _propBlock.SetColor("_BaseColor", targetColor); // URP 호환
+            _propBlock.SetColor("_BaseColor", targetColor); // URP Lit 지원
             _meshRenderer.SetPropertyBlock(_propBlock);
         }
 
@@ -203,7 +249,7 @@ namespace ChessMonsters.Grid
 
             if (_boxCollider != null) _boxCollider.enabled = true;
 
-            UpdateBaseColor();
+            UpdateVisualsForType();
             ApplyHighlightColor();
 
             if (animate && gameObject.activeInHierarchy)
