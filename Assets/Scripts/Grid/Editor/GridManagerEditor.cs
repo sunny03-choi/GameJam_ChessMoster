@@ -35,6 +35,53 @@ namespace ChessMonsters.Grid.Editor
                 }
             }
 
+            EditorGUILayout.Space(6);
+            EditorGUILayout.LabelField("잔디 배치 및 정육면체 큐브 설정", EditorStyles.boldLabel);
+
+            using (new EditorGUILayout.HorizontalScope())
+            {
+                GUI.backgroundColor = new Color(0.45f, 0.95f, 0.45f);
+                if (GUILayout.Button("🎲 잔디 랜덤 재배치 (Randomize)", GUILayout.Height(30)))
+                {
+                    Undo.RegisterFullObjectHierarchyUndo(manager.gameObject, "Randomize Grass Placement");
+                    manager.RandomizeGrassPlacement();
+                    EditorUtility.SetDirty(manager);
+                }
+
+                GUI.backgroundColor = new Color(0.9f, 0.9f, 0.5f);
+                if (GUILayout.Button("🏁 체스판 패턴으로 배치", GUILayout.Height(30)))
+                {
+                    Undo.RegisterFullObjectHierarchyUndo(manager.gameObject, "Set Checkerboard Placement");
+                    manager.SetCheckerboardPlacement();
+                    EditorUtility.SetDirty(manager);
+                }
+            }
+
+            using (new EditorGUILayout.HorizontalScope())
+            {
+                GUI.backgroundColor = manager.TileThickness >= 0.9f ? new Color(0.35f, 0.85f, 1.0f) : Color.white;
+                if (GUILayout.Button("📦 정육면체 큐브 (1x1x1)", GUILayout.Height(26)))
+                {
+                    Undo.RegisterFullObjectHierarchyUndo(manager.gameObject, "Set Cube Thickness");
+                    manager.SetTileThickness(1.0f);
+                    EditorUtility.SetDirty(manager);
+                }
+
+                GUI.backgroundColor = manager.TileThickness < 0.9f ? new Color(0.35f, 0.85f, 1.0f) : Color.white;
+                if (GUILayout.Button("📏 납작한 슬랩 (1x0.3x1)", GUILayout.Height(26)))
+                {
+                    Undo.RegisterFullObjectHierarchyUndo(manager.gameObject, "Set Slab Thickness");
+                    manager.SetTileThickness(0.3f);
+                    EditorUtility.SetDirty(manager);
+                }
+            }
+
+            GUI.backgroundColor = new Color(0.3f, 0.75f, 1.0f);
+            if (GUILayout.Button("🎨 타일 텍스처 머티리얼 일괄 적용 (URP)", GUILayout.Height(30)))
+            {
+                SetupTileMaterials.GenerateMaterialsAndApply();
+            }
+
             GUI.backgroundColor = Color.white;
             EditorGUILayout.Space(6);
 
