@@ -13,15 +13,15 @@ namespace ChessMonsters.Grid
     }
 
     /// <summary>
-    /// 7x7 체스판 그리드를 생성하고 관리하는 매니저 클래스
+    /// 9x9 체스판 그리드를 생성하고 관리하는 매니저 클래스
     /// </summary>
     [ExecuteAlways]
     public class GridManager : MonoBehaviour
     {
         public static GridManager Instance { get; private set; }
 
-        public const int BoardWidth = 7;
-        public const int BoardHeight = 7;
+        public const int BoardWidth = 9;
+        public const int BoardHeight = 9;
 
         [Header("Grid Layout Settings")]
         [SerializeField] private float _tileSize = 1.0f;
@@ -71,6 +71,12 @@ namespace ChessMonsters.Grid
         [Tooltip("물 타일 머티리얼")]
         [SerializeField] private Material _waterMaterial;
 
+        [Tooltip("나무 다리 타일 머티리얼")]
+        [SerializeField] private Material _bridgeMaterial;
+
+        [Tooltip("외곽 석벽 타일 머티리얼")]
+        [SerializeField] private Material _wallMaterial;
+
         [Tooltip("장애물 타일 머티리얼")]
         [SerializeField] private Material _obstacleMaterial;
 
@@ -81,7 +87,7 @@ namespace ChessMonsters.Grid
         [SerializeField] private float _fallFloorY = -5.0f;
 
         [Header("Field Preset (정해진 지형)")]
-        [SerializeField] private FieldPresetType _currentPreset = FieldPresetType.DefaultPlain;
+        [SerializeField] private FieldPresetType _currentPreset = FieldPresetType.BattleIsland;
 
         [SerializeField, HideInInspector]
         private Tile[] _serializedTiles = new Tile[BoardWidth * BoardHeight];
@@ -98,6 +104,8 @@ namespace ChessMonsters.Grid
         public Material DarkTileMaterial => _darkTileMaterial;
         public Material DarkTileVariationMaterial => _darkTileVariationMaterial;
         public Material WaterMaterial => _waterMaterial;
+        public Material BridgeMaterial => _bridgeMaterial;
+        public Material WallMaterial => _wallMaterial;
         public Material ObstacleMaterial => _obstacleMaterial;
 
         public float TileThickness
@@ -228,17 +236,18 @@ namespace ChessMonsters.Grid
                 }
             }
 
-            Debug.Log($"[GridManager] 7x7 체스판 그리드 오브젝트(총 49칸) 생성 완료. (모드: {_placementMode}, 두께: {_tileThickness:F1}, 시드: {activeSeed})");
+            Debug.Log($"[GridManager] 9x9 체스판 그리드 오브젝트(총 {BoardWidth * BoardHeight}칸) 생성 완료. (모드: {_placementMode}, 두께: {_tileThickness:F1}, 시드: {activeSeed})");
         }
 
         /// <summary>
-        /// 기획서 명세: "7×7의 공간을 가지고 있으며 정해진 지형이 존재한다."
-        /// 정해진 지형 프리셋(기본 평원, 강/호수, 고지대 단차, 습지)을 필드에 적용합니다.
+        /// 9x9 필드 지형 프리셋 적용 (대격돌 섬, 강/호수, 고지대 단차, 습지, 기본 평원)
         /// </summary>
         public void ApplyFieldPreset(FieldPresetType preset)
         {
             _currentPreset = preset;
             if (_grid == null || _grid.GetLength(0) != BoardWidth) RebuildGridFromChildren();
+
+            ClearEnvironmentDecorations();
 
             // 1. 모든 타일을 기본 일반 상태(높이 0, 파괴 복구)로 초기화
             for (int z = 0; z < BoardHeight; z++)
@@ -249,6 +258,7 @@ namespace ChessMonsters.Grid
                     if (tile != null)
                     {
                         tile.RestoreTile(TileType.Normal, false);
+                        tile.SetHalfBlock(false);
                         tile.SetHeight(0f);
                     }
                 }
@@ -257,43 +267,99 @@ namespace ChessMonsters.Grid
             // 2. 프리셋별 특수 지형 적용
             switch (preset)
             {
-                case FieldPresetType.RiverField:
-                    // 강/호수 지형: 중앙(Z = 3)이 물로 채워지고, 특정 칸(X = 1, X = 5)에 건널 수 있는 여울/다리 형성
+                case FieldPresetType.BattleIsland:
+                    // 5. 9x9 대격돌 섬 (참고 사진 지형 완벽 구현):
+                    // - 중앙 수로(Z = 4): 3개의 나무 다리(X=1, X=4, X=7) 및 수면 높이 0.6 수로 물 칸(X=0, 2, 3, 5, 6, 8)
+                    // - 블루 진영(Z: 5~8): 양측 능선 고지대(1.0h) + 반칸 디딤돌(0.5h) + 중앙 언덕 + 블루 진영 깃발
+                    // - 레드 진영(Z: 0~3): 양측 능선 고지대(1.0h) + 반칸 디딤돌(0.5h) + 중앙 언덕 + 레드 진영 깃발
+                    // - 외곽 석벽: 9x9 섬을 둘러싼 코블스톤 테두리 벽
+
+                    // 1) 중앙 강줄기 (Z = 4) & 3개 나무 다리
                     for (int x = 0; x < BoardWidth; x++)
                     {
-                        if (x != 1 && x != 5)
+                        Tile t = GetTile(x, 4);
+                        if (t != null)
                         {
-                            Tile t = GetTile(x, 3);
-                            if (t != null) t.SetTileType(TileType.Water);
+                            if (x == 1 || x == 4 || x == 7)
+                            {
+                                // 나무 다리 (두께 0.3, 양쪽 둑을 잇는 통행 가능 다리)
+                                t.SetTileType(TileType.Bridge);
+                            }
+                            else
+                            {
+                                // 물 칸 (수면 높이 0.6 수로)
+                                t.SetTileType(TileType.Water);
+                            }
+                        }
+                    }
+
+                    // 2) 블루 팀 고지대 언덕 (Z: 5~8)
+                    SetTileHighland(1, 5); SetTileHighland(2, 5); SetTileHighland(1, 6);
+                    SetTileHalfBlock(2, 6); SetTileHalfBlock(3, 5); // 등판용 반칸 디딤돌
+
+                    SetTileHighland(4, 6); // 중앙 1x1 언덕
+                    SetTileHalfBlock(5, 6);
+
+                    SetTileHighland(6, 5); SetTileHighland(7, 5); SetTileHighland(7, 6);
+                    SetTileHalfBlock(6, 6);
+
+                    // 3) 레드 팀 고지대 언덕 (Z: 0~3)
+                    SetTileHighland(1, 3); SetTileHighland(2, 3); SetTileHighland(1, 2);
+                    SetTileHalfBlock(2, 2); SetTileHalfBlock(3, 3);
+
+                    SetTileHighland(4, 2); // 중앙 1x1 언덕
+                    SetTileHalfBlock(3, 2);
+
+                    SetTileHighland(6, 3); SetTileHighland(7, 3); SetTileHighland(7, 2);
+                    SetTileHalfBlock(6, 2);
+
+                    // 4) 외곽 석벽 테두리 및 진영 깃발 배치
+                    BuildPerimeterWallAndBanners();
+                    break;
+
+                case FieldPresetType.RiverField:
+                    // 강/호수 지형 (9x9): 중앙(Z = 4)이 물로 채워지고, (X = 2, X = 6)에 나무 다리 형성
+                    for (int x = 0; x < BoardWidth; x++)
+                    {
+                        Tile t = GetTile(x, 4);
+                        if (t != null)
+                        {
+                            if (x == 2 || x == 6) t.SetTileType(TileType.Bridge);
+                            else t.SetTileType(TileType.Water);
                         }
                     }
                     break;
 
                 case FieldPresetType.HighlandField:
-                    // 고지대 지형: 중앙 3x3 영역(X: 2~4, Z: 2~4)이 단차(높이 1.0f)로 솟아 있음
-                    // 기획서의 필드 파괴 시 낙하 높이에 비례한 추락 피해 및 비행 유닛의 고저차 무시 특성을 체감할 수 있는 3D 입체 전장
-                    for (int z = 2; z <= 4; z++)
+                    // 고지대 지형 (9x9): 중앙 5x5 영역(X: 2~6, Z: 2~6)이 1칸 단차(높이 1.0f)로 솟아 있음
+                    for (int z = 2; z <= 6; z++)
                     {
-                        for (int x = 2; x <= 4; x++)
+                        for (int x = 2; x <= 6; x++)
                         {
                             Tile t = GetTile(x, z);
-                            if (t != null)
-                            {
-                                t.SetHeight(1.0f);
-                            }
+                            if (t != null) t.SetHeight(1.0f);
                         }
                     }
+
+                    // 4방향 진입로에 반칸 높이 디딤돌 배치
+                    Tile sSouth = GetTile(4, 1); if (sSouth != null) sSouth.SetHalfBlock(true, 1.0f);
+                    Tile sNorth = GetTile(4, 7); if (sNorth != null) sNorth.SetHalfBlock(true, 1.0f);
+                    Tile sWest = GetTile(1, 4); if (sWest != null) sWest.SetHalfBlock(true, 1.0f);
+                    Tile sEast = GetTile(7, 4); if (sEast != null) sEast.SetHalfBlock(true, 1.0f);
+
                     Tile obs1 = GetTile(0, 0); if (obs1 != null) obs1.SetTileType(TileType.Obstacle);
-                    Tile obs2 = GetTile(6, 6); if (obs2 != null) obs2.SetTileType(TileType.Obstacle);
+                    Tile obs2 = GetTile(8, 8); if (obs2 != null) obs2.SetTileType(TileType.Obstacle);
                     break;
 
                 case FieldPresetType.MarshField:
-                    // 습지 지형: 징검다리 형태로 물 칸들이 곳곳에 분산 배치됨
+                    // 습지 지형 (9x9): 징검다리 형태로 물 칸들이 곳곳에 분산 배치됨
                     Vector2Int[] waterCoords = new Vector2Int[]
                     {
-                        new Vector2Int(1, 1), new Vector2Int(5, 1),
-                        new Vector2Int(2, 3), new Vector2Int(3, 3), new Vector2Int(4, 3),
-                        new Vector2Int(1, 5), new Vector2Int(5, 5)
+                        new Vector2Int(1, 1), new Vector2Int(4, 1), new Vector2Int(7, 1),
+                        new Vector2Int(2, 3), new Vector2Int(6, 3),
+                        new Vector2Int(3, 4), new Vector2Int(5, 4),
+                        new Vector2Int(2, 5), new Vector2Int(6, 5),
+                        new Vector2Int(1, 7), new Vector2Int(4, 7), new Vector2Int(7, 7)
                     };
                     foreach (var wc in waterCoords)
                     {
@@ -304,11 +370,109 @@ namespace ChessMonsters.Grid
 
                 case FieldPresetType.DefaultPlain:
                 default:
-                    // 기본 평평한 7x7 체스판
+                    // 기본 평평한 9x9 체스판
                     break;
             }
 
             Debug.Log($"[GridManager] 지형 프리셋 적용 완료: {preset}");
+        }
+
+        private void SetTileHighland(int x, int z, float height = 1.0f)
+        {
+            Tile t = GetTile(x, z);
+            if (t != null) t.SetHeight(height);
+        }
+
+        private void SetTileHalfBlock(int x, int z, float surfaceHeight = 1.0f)
+        {
+            Tile t = GetTile(x, z);
+            if (t != null) t.SetHalfBlock(true, surfaceHeight);
+        }
+
+        public void ClearEnvironmentDecorations()
+        {
+            Transform oldContainer = transform.Find("_EnvironmentDecorations");
+            if (oldContainer != null)
+            {
+                if (Application.isPlaying) Destroy(oldContainer.gameObject);
+                else DestroyImmediate(oldContainer.gameObject);
+            }
+        }
+
+        public void BuildPerimeterWallAndBanners()
+        {
+            ClearEnvironmentDecorations();
+
+            GameObject container = new GameObject("_EnvironmentDecorations");
+            container.transform.SetParent(transform, false);
+
+            float step = _tileSize + _tileSpacing;
+            float offsetX = (BoardWidth - 1) * step * 0.5f;
+            float offsetZ = (BoardHeight - 1) * step * 0.5f;
+
+            // 1. 9x9 섬 외곽 석벽 (Cobblestone Wall) 테두리 생성
+            Mesh cubeMesh = TileMeshUtility.GetOrCreateTwoSubmeshCubeMesh();
+            Material wallMat = _wallMaterial;
+            if (wallMat == null)
+            {
+#if UNITY_EDITOR
+                wallMat = UnityEditor.AssetDatabase.LoadAssetAtPath<Material>("Assets/Materials/Tiles/Mat_Tile_Wall_Stone.mat");
+#endif
+            }
+
+            for (int z = -1; z <= BoardHeight; z++)
+            {
+                for (int x = -1; x <= BoardWidth; x++)
+                {
+                    bool isPerimeter = (x == -1 || x == BoardWidth || z == -1 || z == BoardHeight);
+                    if (isPerimeter)
+                    {
+                        GameObject wallObj = new GameObject($"Wall_{x}_{z}");
+                        wallObj.transform.SetParent(container.transform, false);
+                        wallObj.transform.localPosition = new Vector3(x * step - offsetX, 0.15f, z * step - offsetZ);
+                        wallObj.transform.localScale = new Vector3(_tileSize, 1.3f, _tileSize);
+
+                        MeshFilter mf = wallObj.AddComponent<MeshFilter>();
+                        mf.sharedMesh = cubeMesh;
+
+                        MeshRenderer mr = wallObj.AddComponent<MeshRenderer>();
+                        if (wallMat != null)
+                        {
+                            mr.sharedMaterials = new Material[] { wallMat, wallMat };
+                        }
+
+                        BoxCollider bc = wallObj.AddComponent<BoxCollider>();
+                        bc.size = Vector3.one;
+                    }
+                }
+            }
+
+            // 2. 블루 진영 깃발 (2, 8) 및 레드 진영 깃발 (6, 0)
+            SpawnBannerProp(container.transform, 2, 8, "Assets/Textures/UI/Sprite_Banner_Blue.png", "BlueTeamBanner");
+            SpawnBannerProp(container.transform, 6, 0, "Assets/Textures/UI/Sprite_Banner_Red.png", "RedTeamBanner");
+        }
+
+        private void SpawnBannerProp(Transform parent, int gridX, int gridZ, string spritePath, string objName)
+        {
+            Tile tile = GetTile(gridX, gridZ);
+            if (tile == null) return;
+
+            Sprite bannerSprite = null;
+#if UNITY_EDITOR
+            bannerSprite = UnityEditor.AssetDatabase.LoadAssetAtPath<Sprite>(spritePath);
+#endif
+            if (bannerSprite == null) return;
+
+            GameObject bannerObj = new GameObject(objName);
+            bannerObj.transform.SetParent(parent, false);
+            bannerObj.transform.position = tile.TopSurfacePosition;
+            bannerObj.transform.localScale = Vector3.one * 1.25f;
+
+            SpriteRenderer sr = bannerObj.AddComponent<SpriteRenderer>();
+            sr.sprite = bannerSprite;
+            sr.sortingOrder = 3;
+
+            bannerObj.AddComponent<Unit.SpriteBillboard>();
         }
 
         private Tile CreateTileObject(int x, int z, Vector3 localPos, System.Random rnd = null)
@@ -451,6 +615,10 @@ namespace ChessMonsters.Grid
                 _darkTileVariationMaterial = UnityEditor.AssetDatabase.LoadAssetAtPath<Material>("Assets/Materials/Tiles/Mat_Tile_DirtGrass_02.mat");
             if (_waterMaterial == null)
                 _waterMaterial = UnityEditor.AssetDatabase.LoadAssetAtPath<Material>("Assets/Materials/Tiles/Mat_Tile_Water.mat");
+            if (_bridgeMaterial == null)
+                _bridgeMaterial = UnityEditor.AssetDatabase.LoadAssetAtPath<Material>("Assets/Materials/Tiles/Mat_Tile_Bridge_Wood.mat");
+            if (_wallMaterial == null)
+                _wallMaterial = UnityEditor.AssetDatabase.LoadAssetAtPath<Material>("Assets/Materials/Tiles/Mat_Tile_Wall_Stone.mat");
             if (_obstacleMaterial == null)
                 _obstacleMaterial = UnityEditor.AssetDatabase.LoadAssetAtPath<Material>("Assets/Materials/Tiles/Mat_Tile_Obstacle.mat");
         }
@@ -593,6 +761,70 @@ namespace ChessMonsters.Grid
         }
 
         /// <summary>
+        /// 수정사항 반영: 유닛이 이동할 때 앞, 뒤, 좌, 우 (+ 십자 모양)로 1칸씩만 이동 가능한 인접 타일 목록 반환
+        /// 단차 제약: 1칸(1.0f) 이상의 높은 블록은 조건부로 못 올라가며, 
+        /// 일반 블록의 절반 높이 블록(HalfBlock, 0.5f)을 디딤돌 삼아서만 올라갈 수 있습니다.
+        /// (비행 유닛은 단차 제약을 무시하고 자유롭게 이동 가능)
+        /// </summary>
+        public List<Tile> GetMovableStepNeighbors(Vector2Int currentCoord, bool isFlying = false, float maxClimbHeight = 0.55f)
+        {
+            List<Tile> movableNeighbors = new List<Tile>();
+            Tile currentTile = GetTile(currentCoord);
+            if (currentTile == null || currentTile.IsDestroyed) return movableNeighbors;
+
+            // 앞, 뒤, 좌, 우 (+ 모양 4방향)
+            Vector2Int[] dirs = new Vector2Int[]
+            {
+                Vector2Int.up,    // 앞 (Z+)
+                Vector2Int.down,  // 뒤 (Z-)
+                Vector2Int.left,  // 좌 (X-)
+                Vector2Int.right  // 우 (X+)
+            };
+
+            foreach (var dir in dirs)
+            {
+                Vector2Int targetCoord = currentCoord + dir;
+                Tile neighbor = GetTile(targetCoord);
+
+                // 1. 타일 유효성 및 파괴 여부 검사
+                if (neighbor == null || neighbor.IsDestroyed) continue;
+
+                // 2. 다른 유닛 점유 여부 검사 (이미 유닛이 있는 칸은 이동 불가)
+                if (neighbor.OccupyingUnit != null) continue;
+
+                // 3. 비행 유닛이 아닐 경우 물/장애물 통과 불가
+                if (!isFlying)
+                {
+                    if (neighbor.Type == TileType.Water || neighbor.Type == TileType.Obstacle)
+                        continue;
+                }
+
+                // 4. 고저차(단차) 등판 제약 검사:
+                // 1칸(1.0f) 이상 높은 블록은 올라갈 수 없음! (반칸 높이 0.5f 이하 블록만 등판 가능)
+                if (!isFlying)
+                {
+                    float climbDiff = neighbor.TopSurfacePosition.y - currentTile.TopSurfacePosition.y;
+                    if (climbDiff > maxClimbHeight)
+                    {
+                        // 1칸 이상 높은 블록은 등판 불가
+                        continue;
+                    }
+
+                    // 안전 제약: 너무 높은 절벽(1.5f 초과)으로 떨어지는 이동 방지
+                    float dropDiff = currentTile.TopSurfacePosition.y - neighbor.TopSurfacePosition.y;
+                    if (dropDiff > 1.5f)
+                    {
+                        continue;
+                    }
+                }
+
+                movableNeighbors.Add(neighbor);
+            }
+
+            return movableNeighbors;
+        }
+
+        /// <summary>
         /// 유닛 기동력(이동 범위) 또는 사거리에 따른 타일 탐색 (BFS)
         /// </summary>
         /// <param name="start">시작 좌표</param>
@@ -622,11 +854,18 @@ namespace ChessMonsters.Grid
 
                 foreach (var neighbor in GetNeighbors(current, false))
                 {
-                    // 비행 유닛이 아니면 통과 불가 타일(물, 장애물 등) 체크
+                    // 비행 유닛이 아니면 통과 불가 타일(물, 장애물 등) 및 1칸 이상 높은 단차 체크
                     if (!isFlying)
                     {
                         if (neighbor.Type == TileType.Water || neighbor.Type == TileType.Obstacle)
                             continue;
+
+                        Tile currentTileObj = GetTile(current);
+                        if (currentTileObj != null)
+                        {
+                            float climb = neighbor.TopSurfacePosition.y - currentTileObj.TopSurfacePosition.y;
+                            if (climb > 0.55f) continue;
+                        }
                     }
 
                     Vector2Int nCoord = neighbor.Coord;

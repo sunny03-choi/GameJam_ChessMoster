@@ -82,22 +82,49 @@ namespace ChessMonsters.Grid.Editor
                 SetupTileMaterials.GenerateMaterialsAndApply();
             }
 
+            GUI.backgroundColor = new Color(1.0f, 0.95f, 0.4f);
+            if (GUILayout.Button("♟ 샘플 2D 빌보드 유닛 소환 (4,3)", GUILayout.Height(30)))
+            {
+                Tile centerTile = manager.GetTile(4, 3);
+                if (centerTile != null)
+                {
+                    GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/Unit.prefab");
+                    if (prefab != null)
+                    {
+                        if (centerTile.OccupyingUnit != null)
+                        {
+                            DestroyImmediate(centerTile.OccupyingUnit);
+                            centerTile.SetOccupyingUnit(null);
+                        }
+
+                        GameObject unitObj = PrefabUtility.InstantiatePrefab(prefab) as GameObject;
+                        if (unitObj != null)
+                        {
+                            Undo.RegisterCreatedObjectUndo(unitObj, "Spawn Sample Unit");
+                            Unit.Unit unit = unitObj.GetComponent<Unit.Unit>();
+                            if (unit != null) unit.PlaceOnTile(centerTile);
+                            Selection.activeGameObject = unitObj;
+                            Debug.Log("[GridManagerEditor] (4,3) 타일에 샘플 2D 빌보드 유닛 소환 완료!");
+                        }
+                    }
+                }
+            }
+
             GUI.backgroundColor = Color.white;
             EditorGUILayout.Space(6);
 
             EditorGUILayout.LabelField("특수 필드 및 상태 테스트", EditorStyles.miniBoldLabel);
             using (new EditorGUILayout.HorizontalScope())
             {
-                if (GUILayout.Button("샘플 물/장애물 칸 배치"))
+                if (GUILayout.Button("샘플 물/나무다리 칸 배치"))
                 {
-                    // 기획서 예시: 물 칸 (중앙 주변 샘플 배치)
-                    Tile t1 = manager.GetTile(2, 3);
-                    Tile t2 = manager.GetTile(3, 3);
-                    Tile t3 = manager.GetTile(4, 3);
+                    Tile t1 = manager.GetTile(3, 4);
+                    Tile t2 = manager.GetTile(4, 4);
+                    Tile t3 = manager.GetTile(5, 4);
                     if (t1 != null) t1.SetTileType(TileType.Water);
-                    if (t2 != null) t2.SetTileType(TileType.Water);
+                    if (t2 != null) t2.SetTileType(TileType.Bridge);
                     if (t3 != null) t3.SetTileType(TileType.Water);
-                    Debug.Log("[GridManagerEditor] (2,3), (3,3), (4,3) 타일을 '물' 칸으로 설정했습니다.");
+                    Debug.Log("[GridManagerEditor] (3,4) 물, (4,4) 나무다리, (5,4) 물 칸으로 설정했습니다.");
                 }
 
                 if (GUILayout.Button("랜덤 타일 파괴 테스트"))
@@ -120,7 +147,17 @@ namespace ChessMonsters.Grid.Editor
             }
 
             EditorGUILayout.Space(6);
-            EditorGUILayout.LabelField("기획서 명세: 정해진 지형 프리셋", EditorStyles.miniBoldLabel);
+            EditorGUILayout.LabelField("지형 프리셋 (참고 사진 지형 포함)", EditorStyles.miniBoldLabel);
+
+            GUI.backgroundColor = new Color(0.4f, 0.85f, 1.0f);
+            if (GUILayout.Button("⚔️ 5. 9x9 대격돌 섬 전장 (참고 사진 지형)", GUILayout.Height(32)))
+            {
+                Undo.RegisterFullObjectHierarchyUndo(manager.gameObject, "Apply BattleIsland Preset");
+                manager.ApplyFieldPreset(FieldPresetType.BattleIsland);
+                EditorUtility.SetDirty(manager);
+            }
+            GUI.backgroundColor = Color.white;
+
             using (new EditorGUILayout.HorizontalScope())
             {
                 if (GUILayout.Button("1. 기본 평원"))

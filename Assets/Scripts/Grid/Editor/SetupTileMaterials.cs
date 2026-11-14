@@ -69,13 +69,12 @@ namespace ChessMonsters.Grid.Editor
                 0.1f
             );
 
-            Material matWater = CreateOrUpdateMaterial(
-                $"{MaterialsDir}/Mat_Tile_Water.mat",
-                urpShader,
-                null,
-                new Color(0.20f, 0.60f, 0.90f, 0.95f),
-                0.85f
-            );
+            // 신규 리소스(나무 다리, 3프레임 물, 외곽 석벽) 생성
+            CreateTerrainTextures.GenerateAll();
+
+            Material matBridge = AssetDatabase.LoadAssetAtPath<Material>($"{MaterialsDir}/Mat_Tile_Bridge_Wood.mat");
+            Material matWater = AssetDatabase.LoadAssetAtPath<Material>($"{MaterialsDir}/Mat_Tile_Water.mat");
+            Material matWall = AssetDatabase.LoadAssetAtPath<Material>($"{MaterialsDir}/Mat_Tile_Wall_Stone.mat");
 
             Material matObstacle = CreateOrUpdateMaterial(
                 $"{MaterialsDir}/Mat_Tile_Obstacle.mat",
@@ -92,7 +91,7 @@ namespace ChessMonsters.Grid.Editor
             Mesh cubeMesh = TileMeshUtility.GetOrCreateTwoSubmeshCubeMesh();
             Debug.Log($"[SetupTileMaterials] 2-Submesh 큐브 메시 준비 완료: {cubeMesh.name} (Submesh 개수: {cubeMesh.subMeshCount})");
 
-            // 5. 씬 내 GridManager에 머티리얼 적용 및 7x7 그리드 재생성
+            // 5. 씬 내 GridManager에 머티리얼 적용 및 9x9 그리드 재생성
             GridManager gm = Object.FindFirstObjectByType<GridManager>();
             if (gm == null)
             {
@@ -109,17 +108,21 @@ namespace ChessMonsters.Grid.Editor
                 so.FindProperty("_darkTileMaterial").objectReferenceValue = matDirt;
                 so.FindProperty("_darkTileVariationMaterial").objectReferenceValue = matDirtGrass;
                 so.FindProperty("_waterMaterial").objectReferenceValue = matWater;
+                so.FindProperty("_bridgeMaterial").objectReferenceValue = matBridge;
+                so.FindProperty("_wallMaterial").objectReferenceValue = matWall;
                 so.FindProperty("_obstacleMaterial").objectReferenceValue = matObstacle;
 
                 // 정육면체 (1.0f) 및 랜덤 잔디 배치 기본 모드 적용
                 so.FindProperty("_tileThickness").floatValue = 1.0f;
                 so.FindProperty("_placementMode").enumValueIndex = (int)TilePlacementMode.RandomGrass;
                 so.FindProperty("_randomizeRotation").boolValue = true;
+                so.FindProperty("_currentPreset").enumValueIndex = (int)FieldPresetType.BattleIsland;
 
                 so.ApplyModifiedProperties();
 
-                // 7x7 그리드 생성
+                // 9x9 그리드 생성 및 사진 지형 프리셋 적용
                 gm.GenerateGrid();
+                gm.ApplyFieldPreset(FieldPresetType.BattleIsland);
                 EditorUtility.SetDirty(gm);
 
                 // 프리팹 생성/저장
