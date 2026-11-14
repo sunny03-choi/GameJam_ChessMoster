@@ -39,13 +39,26 @@ namespace ChessMonsters.Grid
         private Coroutine _animCoroutine;
         private Vector3 _originalLocalPos;
 
+        [SerializeField] private bool _isHalfBlock = false;
+
         public Vector2Int Coord => _coord;
         public TileType Type => _type;
         public float Height => _height;
         public bool IsDarkSquare => _isDarkSquare;
         public bool IsDestroyed => _isDestroyed;
+        public bool IsHalfBlock => _isHalfBlock;
+        public bool IsBridge => _type == TileType.Bridge;
+        public bool IsWater => _type == TileType.Water;
         public bool IsPassable => !_isDestroyed && _type != TileType.Water && _type != TileType.Obstacle && _occupyingUnit == null;
         public GameObject OccupyingUnit => _occupyingUnit;
+        public Vector3 TopSurfacePosition
+        {
+            get
+            {
+                float halfThickness = transform.localScale.y * 0.5f;
+                return transform.position + Vector3.up * (halfThickness + 0.02f);
+            }
+        }
 
         public event Action<Tile> OnClicked;
         public event Action<Tile> OnHoverEnter;
@@ -109,6 +122,15 @@ namespace ChessMonsters.Grid
                     _baseColor = Color.white;
                     break;
 
+                case TileType.Bridge:
+                    if (GridManager.Instance != null && GridManager.Instance.BridgeMaterial != null)
+                    {
+                        currentTop = GridManager.Instance.BridgeMaterial;
+                        currentSide = GridManager.Instance.BridgeMaterial;
+                    }
+                    _baseColor = Color.white;
+                    break;
+
                 case TileType.Obstacle:
                     if (GridManager.Instance != null && GridManager.Instance.ObstacleMaterial != null)
                     {
@@ -118,13 +140,15 @@ namespace ChessMonsters.Grid
                     break;
 
                 case TileType.Normal:
+                case TileType.HalfBlock:
                 default:
                     currentTop = _topMaterial;
+                    currentSide = _sideMaterial;
                     _baseColor = Color.white;
                     break;
             }
 
-            // 2-Submesh 큐브 지원: Submesh 0(측면/밑면) = 흙, Submesh 1(윗면) = 잔디/특수
+            // 2-Submesh 큐브 지원: Submesh 0(측면/밑면) = 흙/목재, Submesh 1(윗면) = 잔디/물/목재
             MeshFilter mf = GetComponentInChildren<MeshFilter>();
             if (currentSide != null && currentTop != null && (mf == null || mf.sharedMesh == null || mf.sharedMesh.subMeshCount >= 2))
             {
@@ -137,11 +161,45 @@ namespace ChessMonsters.Grid
         }
 
         /// <summary>
-        /// 타일 속성 변경 (일반, 물, 장애물 등)
+        /// 타일 속성 변경 (일반, 물, 나무 다리, 장애물 등)
+        /// 피드백 명세: 물 높이는 0.6(수로), 다리 높이는 0.3(목재 슬랩) 반영
         /// </summary>
         public void SetTileType(TileType newType)
         {
             _type = newType;
+            _isHalfBlock = (_type == TileType.HalfBlock);
+
+            float baseThickness = GridManager.Instance != null ? GridManager.Instance.TileThickness : 1.0f;
+            float tileSize = GridManager.Instance != null ? GridManager.Instance.TileSize : 1.0f;
+
+            switch (_type)
+            {
+                case TileType.Water:
+                    // 피드백: 일반 칸(1.0) 기준 물 높이는 0.6 (수면이 0.4 낮게 파여 있는 수로 연출)
+                    transform.localScale = new Vector3(tileSize, 0.6f, tileSize);
+                    transform.localPosition = new Vector3(_originalLocalPos.x, _height - 0.2f, _originalLocalPos.z);
+                    break;
+
+                case TileType.Bridge:
+                    // 피드백: 나무 다리 높이(두께)는 0.3 (수로 위에 걸쳐 양쪽 잔디 둑을 잇는 목재 다리)
+                    transform.localScale = new Vector3(tileSize, 0.3f, tileSize);
+                    transform.localPosition = new Vector3(_originalLocalPos.x, _height + 0.35f, _originalLocalPos.z);
+                    break;
+
+                case TileType.HalfBlock:
+                    // 반칸 높이 디딤돌 (두께 0.5)
+                    transform.localScale = new Vector3(tileSize, 0.5f, tileSize);
+                    transform.localPosition = new Vector3(_originalLocalPos.x, _height + 0.25f, _originalLocalPos.z);
+                    break;
+
+                case TileType.Normal:
+                case TileType.Obstacle:
+                default:
+                    transform.localScale = new Vector3(tileSize, baseThickness, tileSize);
+                    transform.localPosition = new Vector3(_originalLocalPos.x, _height, _originalLocalPos.z);
+                    break;
+            }
+
             UpdateVisualsForType();
             ApplyHighlightColor();
         }
@@ -159,6 +217,44 @@ namespace ChessMonsters.Grid
                 transform.position = pos;
                 _originalLocalPos = transform.localPosition;
             }
+        }
+
+        /// <summary>
+        /// 일반 블록의 절반 높이의 블록 (반칸 디딤돌/계단 블록) 설정
+        /// </summary>
+        /// <param name="isHalf">반칸 블록 활성화 여부</param>
+        /// <param name="surfaceHeight">상단 표면 목표 높이 (기본: 평지 0.5보다 반칸 높은 1.0f)</param>
+        public void SetHalfBlock(bool isHalf, float surfaceHeight = 1.0f)
+        {
+            _isHalfBlock = isHalf;
+            float baseThickness = GridManager.Instance != null ? GridManager.Instance.TileThickness : 1.0f;
+            float tileSize = GridManager.Instance != null ? GridManager.Instance.TileSize : 1.0f;
+
+            if (_isHalfBlock)
+            {
+                _type = TileType.HalfBlock;
+                float halfThick = baseThickness * 0.5f;
+                transform.localScale = new Vector3(tileSize, halfThick, tileSize);
+
+                Vector3 pos = transform.position;
+                pos.y = surfaceHeight - halfThick * 0.5f;
+                transform.position = pos;
+                _height = surfaceHeight - 0.5f;
+                _originalLocalPos = transform.localPosition;
+            }
+            else
+            {
+                if (_type == TileType.HalfBlock) _type = TileType.Normal;
+                transform.localScale = new Vector3(tileSize, baseThickness, tileSize);
+
+                Vector3 pos = transform.position;
+                pos.y = _height;
+                transform.position = pos;
+                _originalLocalPos = transform.localPosition;
+            }
+
+            UpdateVisualsForType();
+            ApplyHighlightColor();
         }
 
         /// <summary>
@@ -244,7 +340,18 @@ namespace ChessMonsters.Grid
         {
             if (!_isDestroyed) return;
             _isDestroyed = false;
-            _type = type;
+            if (type == TileType.HalfBlock)
+            {
+                SetHalfBlock(true);
+            }
+            else
+            {
+                _isHalfBlock = false;
+                _type = type;
+                float baseThickness = GridManager.Instance != null ? GridManager.Instance.TileThickness : 1.0f;
+                float tileSize = GridManager.Instance != null ? GridManager.Instance.TileSize : 1.0f;
+                transform.localScale = new Vector3(tileSize, baseThickness, tileSize);
+            }
             gameObject.SetActive(true);
 
             if (_boxCollider != null) _boxCollider.enabled = true;
@@ -265,14 +372,21 @@ namespace ChessMonsters.Grid
 
         private void HandleUnitFall(float floorY)
         {
-            float fallDistance = Mathf.Max(0f, transform.position.y - floorY);
-            // 기획서: 낙하 높이에 비례한 피해
-            int damage = Mathf.RoundToInt(fallDistance * 2f);
-            Debug.Log($"[Tile {_coord}] 유닛 추락 발생! 낙하 거리: {fallDistance:F1}m, 낙하 피해량: {damage}");
-
-            // 추락 연출 또는 유닛 파괴 로직 연결 지점
-            // (유닛 스크립트 연결 시 unit.TakeDamage(damage) 호출 가능)
-            _occupyingUnit = null;
+            if (_occupyingUnit != null)
+            {
+                var unit = _occupyingUnit.GetComponent<ChessMonsters.Unit.Unit>();
+                if (unit != null)
+                {
+                    unit.Fall(floorY);
+                }
+                else
+                {
+                    float fallDistance = Mathf.Max(0f, transform.position.y - floorY);
+                    int damage = Mathf.RoundToInt(fallDistance * 2f);
+                    Debug.Log($"[Tile {_coord}] 유닛 추락 발생! 낙하 거리: {fallDistance:F1}m, 낙하 피해량: {damage}");
+                }
+                _occupyingUnit = null;
+            }
         }
 
         private IEnumerator AnimateFallAndDeactivate()
