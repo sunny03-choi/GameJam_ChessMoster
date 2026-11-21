@@ -3,6 +3,9 @@ using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.SceneManagement;
+using ChessMonsters.UI;
+using ChessMonsters.UI.Editor;
+using ChessMonsters.Unit;
 
 namespace ChessMonsters.Grid.Editor
 {
@@ -24,6 +27,7 @@ namespace ChessMonsters.Grid.Editor
                 gridManager = boardObj.AddComponent<GridManager>();
                 boardObj.AddComponent<GridInteractionHandler>();
                 boardObj.AddComponent<WaterTileAnimator>();
+                boardObj.AddComponent<UnitActionMenuUI>();
                 Undo.RegisterCreatedObjectUndo(boardObj, "Create ChessBoard");
             }
             else
@@ -37,13 +41,18 @@ namespace ChessMonsters.Grid.Editor
                 {
                     boardObj.AddComponent<WaterTileAnimator>();
                 }
+                if (boardObj.GetComponent<UnitActionMenuUI>() == null)
+                {
+                    boardObj.AddComponent<UnitActionMenuUI>();
+                }
             }
 
             boardObj.transform.position = Vector3.zero;
             boardObj.transform.rotation = Quaternion.identity;
 
-            // 3. 신규 리소스(다리, 3프레임 물, 석벽) 생성 및 9x9 그리드 타일 생성
+            // 3. 신규 리소스(다리, 3프레임 물, 석벽, 쿠키런 3종 선택지 텍스처) 생성 및 9x9 그리드 타일 생성
             CreateTerrainTextures.GenerateAll();
+            CreateActionMenuTextures.GenerateAll();
             gridManager.SetupDefaultMaterialsIfNull();
             gridManager.GenerateGrid();
             gridManager.ApplyFieldPreset(FieldPresetType.BattleIsland);
@@ -70,19 +79,47 @@ namespace ChessMonsters.Grid.Editor
                 dirLight.intensity = 1.15f;
             }
 
-            // 6. 2D 빌보드 샘플 유닛 배치 (레드 진영 중앙 다리 앞 타일 4, 3)
-            Tile startTile = gridManager.GetTile(4, 3);
-            if (startTile != null && startTile.OccupyingUnit == null)
+            // 6. 2D 빌보드 샘플 유닛 배치 (다리 4,4를 사이에 두고 아군 4,3 vs 적군 4,5 대치)
+            GameObject unitPrefab = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/Unit.prefab");
+            if (unitPrefab != null)
             {
-                GameObject unitPrefab = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/Unit.prefab");
-                if (unitPrefab != null)
+                // 6-1. 아군 폰 (White Pawn, 4, 3)
+                Tile playerTile = gridManager.GetTile(4, 3);
+                if (playerTile != null)
                 {
-                    GameObject unitObj = PrefabUtility.InstantiatePrefab(unitPrefab) as GameObject;
-                    if (unitObj != null)
+                    if (playerTile.OccupyingUnit != null) Object.DestroyImmediate(playerTile.OccupyingUnit);
+                    GameObject playerObj = PrefabUtility.InstantiatePrefab(unitPrefab) as GameObject;
+                    if (playerObj != null)
                     {
-                        Undo.RegisterCreatedObjectUndo(unitObj, "Spawn Initial Unit");
-                        Unit.Unit unit = unitObj.GetComponent<Unit.Unit>();
-                        if (unit != null) unit.PlaceOnTile(startTile);
+                        playerObj.name = "Unit_Player_Pawn";
+                        Undo.RegisterCreatedObjectUndo(playerObj, "Spawn Player Unit");
+                        Unit.Unit pUnit = playerObj.GetComponent<Unit.Unit>();
+                        if (pUnit != null)
+                        {
+                            pUnit.Team = UnitTeam.Player;
+                            pUnit.UnitName = "Pawn";
+                            pUnit.PlaceOnTile(playerTile);
+                        }
+                    }
+                }
+
+                // 6-2. 적군 몬스터 폰 (Red Pawn, 4, 5 - 다리 건너편, 사거리 2 내)
+                Tile enemyTile = gridManager.GetTile(4, 5);
+                if (enemyTile != null)
+                {
+                    if (enemyTile.OccupyingUnit != null) Object.DestroyImmediate(enemyTile.OccupyingUnit);
+                    GameObject enemyObj = PrefabUtility.InstantiatePrefab(unitPrefab) as GameObject;
+                    if (enemyObj != null)
+                    {
+                        enemyObj.name = "Unit_Enemy_Pawn";
+                        Undo.RegisterCreatedObjectUndo(enemyObj, "Spawn Enemy Unit");
+                        Unit.Unit eUnit = enemyObj.GetComponent<Unit.Unit>();
+                        if (eUnit != null)
+                        {
+                            eUnit.Team = UnitTeam.Enemy;
+                            eUnit.UnitName = "Enemy Pawn";
+                            eUnit.PlaceOnTile(enemyTile);
+                        }
                     }
                 }
             }
@@ -91,7 +128,7 @@ namespace ChessMonsters.Grid.Editor
             EditorSceneManager.MarkSceneDirty(scene);
             EditorSceneManager.SaveScene(scene);
 
-            Debug.Log("[Chess Monsters] 체스판 그리드 및 씬 셋업이 완료되었습니다!");
+            Debug.Log("[Chess Monsters] 쿠키런 3종 선택지 및 아군/적군 대치 구도 셋업 완료!");
         }
 
         public static void SetupSceneBatch()

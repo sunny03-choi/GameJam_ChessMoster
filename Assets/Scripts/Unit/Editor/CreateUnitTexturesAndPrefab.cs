@@ -3,6 +3,7 @@ using System.IO;
 using UnityEditor;
 using UnityEngine;
 using ChessMonsters.Grid;
+using ChessMonsters.UI.Editor;
 
 namespace ChessMonsters.Unit.Editor
 {
@@ -21,11 +22,12 @@ namespace ChessMonsters.Unit.Editor
         {
             EnsureDirectories();
 
-            // 1. 2D 텍스처들 절차적 생성 (임의의 흰색 체스 말 스프라이트, 그림자, 선택 링, 이동 경계 표시)
+            // 1. 2D 텍스처들 절차적 생성
             CreatePawnSpriteTexture();
             CreateShadowTexture();
             CreateSelectionRingTexture();
             CreateMoveBorderTexture();
+            CreateActionMenuTextures.GenerateAll();
 
             AssetDatabase.Refresh();
 
@@ -64,10 +66,6 @@ namespace ChessMonsters.Unit.Editor
             }
         }
 
-        /// <summary>
-        /// 우아하고 뚜렷한 흰색 체스 폰(Pawn) 실루엣 2D 스프라이트 절차적 생성
-        /// (머리 구체, 목 링, 곡선 몸통, 원형 받침대)
-        /// </summary>
         private static void CreatePawnSpriteTexture()
         {
             int width = 256;
@@ -89,17 +87,16 @@ namespace ChessMonsters.Unit.Editor
                     float alpha = 0f;
                     float shade = 1.0f;
 
-                    // 1. 머리 원형 구체 (Head): 중심 (128, 285), 반경 46
+                    // 1. 머리 구체 (Head)
                     float headDist = Vector2.Distance(new Vector2(px, py), new Vector2(128f, 285f));
                     if (headDist <= 46f)
                     {
                         alpha = Mathf.Clamp01((46f - headDist) * 1.5f);
-                        // 은은한 입체감 셰이딩 (중심 위쪽 하이라이트)
                         float lightDist = Vector2.Distance(new Vector2(px, py), new Vector2(115f, 298f));
                         shade = Mathf.Lerp(1.0f, 0.82f, lightDist / 50f);
                     }
 
-                    // 2. 목 링 (Neck Collar): y: 228~242, 타원 반경 36
+                    // 2. 목 링 (Neck Collar)
                     if (py >= 226f && py <= 244f)
                     {
                         float collarW = 34f;
@@ -110,11 +107,10 @@ namespace ChessMonsters.Unit.Editor
                         }
                     }
 
-                    // 3. 곡선 몸통 (Body): y: 80 ~ 230
+                    // 3. 곡선 몸통 (Body)
                     if (py >= 80f && py <= 230f)
                     {
-                        float t = (py - 80f) / 150f; // 0 (아래) ~ 1 (위)
-                        // 부드러운 호리병 형태 곡선 (위 20, 중간 28, 아래 55)
+                        float t = (py - 80f) / 150f;
                         float bodyW = Mathf.Lerp(52f, 20f, Mathf.Pow(t, 0.7f));
                         if (dx <= bodyW)
                         {
@@ -127,7 +123,7 @@ namespace ChessMonsters.Unit.Editor
                         }
                     }
 
-                    // 4. 받침대 중간 턱 (Base Tier 1): y: 48 ~ 82
+                    // 4. 받침대 중간 턱 (Base Tier 1)
                     if (py >= 48f && py <= 84f)
                     {
                         float baseW1 = Mathf.Lerp(70f, 54f, (py - 48f) / 36f);
@@ -138,7 +134,7 @@ namespace ChessMonsters.Unit.Editor
                         }
                     }
 
-                    // 5. 바닥 받침대 (Base Bottom): y: 12 ~ 50
+                    // 5. 바닥 받침대 (Base Bottom)
                     if (py >= 12f && py <= 52f)
                     {
                         float baseW2 = 82f - Mathf.Abs(py - 30f) * 0.4f;
@@ -149,7 +145,6 @@ namespace ChessMonsters.Unit.Editor
                         }
                     }
 
-                    // 외곽선 얇은 소프트 림 효과
                     Color col = new Color(shade, shade, shade, alpha);
                     pixels[y * width + x] = col;
                 }
@@ -157,14 +152,10 @@ namespace ChessMonsters.Unit.Editor
 
             tex.SetPixels(pixels);
             tex.Apply();
-
             File.WriteAllBytes(PawnSpritePath, tex.EncodeToPNG());
             Object.DestroyImmediate(tex);
         }
 
-        /// <summary>
-        /// 바닥에 자연스럽게 눕혀지는 부드러운 원형 그림자 텍스처
-        /// </summary>
         private static void CreateShadowTexture()
         {
             int size = 128;
@@ -183,7 +174,6 @@ namespace ChessMonsters.Unit.Editor
 
                     if (norm <= 1.0f)
                     {
-                        // 부드러운 코사인/쿼드래틱 감쇠
                         alpha = Mathf.Pow(1.0f - norm, 1.8f);
                     }
 
@@ -197,9 +187,6 @@ namespace ChessMonsters.Unit.Editor
             Object.DestroyImmediate(tex);
         }
 
-        /// <summary>
-        /// 유닛 선택 시 발밑에 표시되는 네온 골드 링 텍스처
-        /// </summary>
         private static void CreateSelectionRingTexture()
         {
             int size = 128;
@@ -223,7 +210,6 @@ namespace ChessMonsters.Unit.Editor
                         alpha = Mathf.Pow(alpha, 1.5f);
                     }
 
-                    // 골드/옐로우 링
                     pixels[y * size + x] = new Color(1.0f, 0.85f, 0.15f, alpha * 0.9f);
                 }
             }
@@ -234,9 +220,6 @@ namespace ChessMonsters.Unit.Editor
             Object.DestroyImmediate(tex);
         }
 
-        /// <summary>
-        /// 이동 가능한 타일 상단에 얹어지는 선명한 사각 네온 경계선(Boundary Indicator) 텍스처
-        /// </summary>
         private static void CreateMoveBorderTexture()
         {
             int size = 128;
@@ -254,7 +237,6 @@ namespace ChessMonsters.Unit.Editor
                     float minEdgeDist = Mathf.Min(Mathf.Min(x, size - 1 - x), Mathf.Min(y, size - 1 - y));
                     float alpha = 0f;
 
-                    // 기본 사각 테두리 (outerMargin ~ innerMargin)
                     if (minEdgeDist >= outerMargin && minEdgeDist <= innerMargin)
                     {
                         float mid = (outerMargin + innerMargin) * 0.5f;
@@ -262,7 +244,6 @@ namespace ChessMonsters.Unit.Editor
                         alpha = Mathf.Clamp01(1f - d);
                     }
 
-                    // 4개 코너 브라켓 강조 (코너 부근은 테두리를 더 밝고 두껍게)
                     bool isNearCornerX = (x <= outerMargin + cornerSize) || (x >= size - 1 - outerMargin - cornerSize);
                     bool isNearCornerY = (y <= outerMargin + cornerSize) || (y >= size - 1 - outerMargin - cornerSize);
                     if (isNearCornerX && isNearCornerY && minEdgeDist >= outerMargin && minEdgeDist <= innerMargin + 6f)
@@ -270,14 +251,6 @@ namespace ChessMonsters.Unit.Editor
                         alpha = Mathf.Max(alpha, 0.95f);
                     }
 
-                    // 글로우 및 중심부 미세 틴트
-                    if (alpha < 0.05f && minEdgeDist > innerMargin)
-                    {
-                        // 안쪽은 타일이 깨끗하게 보이도록 완전 투명
-                        alpha = 0f;
-                    }
-
-                    // 네온 청록/시안 색상 (외곽선 뚜렷하게 발광)
                     pixels[y * size + x] = new Color(0.25f, 0.95f, 1.0f, alpha);
                 }
             }
@@ -314,12 +287,12 @@ namespace ChessMonsters.Unit.Editor
             Sprite pawnSprite = AssetDatabase.LoadAssetAtPath<Sprite>(PawnSpritePath);
             Sprite shadowSprite = AssetDatabase.LoadAssetAtPath<Sprite>(ShadowSpritePath);
             Sprite ringSprite = AssetDatabase.LoadAssetAtPath<Sprite>(SelectionRingSpritePath);
+            Sprite badgeSprite = AssetDatabase.LoadAssetAtPath<Sprite>("Assets/Textures/UI/Badge_Mobility_Bubble.png");
 
             // 1. 루트 오브젝트: Unit
             GameObject rootObj = new GameObject("Unit_Pawn");
             Unit unitComp = rootObj.AddComponent<Unit>();
 
-            // 마우스 클릭 및 레이캐스트 감지용 캡슐 콜라이더 (키 1.5m, 반경 0.45m)
             CapsuleCollider collider = rootObj.AddComponent<CapsuleCollider>();
             collider.center = new Vector3(0f, 0.75f, 0f);
             collider.radius = 0.45f;
@@ -337,11 +310,11 @@ namespace ChessMonsters.Unit.Editor
             SpriteBillboard billboard = visualObj.AddComponent<SpriteBillboard>();
             billboard.Mode = SpriteBillboard.BillboardMode.CameraAligned;
 
-            // 3. 자식 2: Shadow (지면에 누운 원형 그림자)
+            // 3. 자식 2: Shadow
             GameObject shadowObj = new GameObject("Shadow");
             shadowObj.transform.SetParent(rootObj.transform, false);
-            shadowObj.transform.localPosition = new Vector3(0f, 0.02f, 0f); // 타일 표면 위 살짝 띄움
-            shadowObj.transform.localRotation = Quaternion.Euler(90f, 0f, 0f); // 바닥에 눕힘
+            shadowObj.transform.localPosition = new Vector3(0f, 0.02f, 0f);
+            shadowObj.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
             shadowObj.transform.localScale = new Vector3(0.9f, 0.9f, 1f);
 
             SpriteRenderer shadowRenderer = shadowObj.AddComponent<SpriteRenderer>();
@@ -349,7 +322,7 @@ namespace ChessMonsters.Unit.Editor
             shadowRenderer.sortingOrder = 0;
             shadowRenderer.color = new Color(0f, 0f, 0f, 0.45f);
 
-            // 4. 자식 3: SelectionRing (선택 시 발밑에 켜지는 골드 링)
+            // 4. 자식 3: SelectionRing
             GameObject ringObj = new GameObject("SelectionRing");
             ringObj.transform.SetParent(rootObj.transform, false);
             ringObj.transform.localPosition = new Vector3(0f, 0.03f, 0f);
@@ -359,17 +332,47 @@ namespace ChessMonsters.Unit.Editor
             SpriteRenderer ringRenderer = ringObj.AddComponent<SpriteRenderer>();
             ringRenderer.sprite = ringSprite;
             ringRenderer.sortingOrder = 0;
-            ringObj.SetActive(false); // 기본 비활성화
+            ringObj.SetActive(false);
 
-            // 5. Unit 컴포넌트에 시각 컴포넌트들 바인딩
+            // 5. 자식 4: MobilityBadge (쿠키런 말풍선형 기동력 뱃지)
+            GameObject badgeObj = new GameObject("MobilityBadge");
+            badgeObj.transform.SetParent(rootObj.transform, false);
+            badgeObj.transform.localPosition = new Vector3(0f, 1.65f, 0f);
+            badgeObj.transform.localScale = new Vector3(0.55f, 0.55f, 1f);
+
+            SpriteBillboard badgeBb = badgeObj.AddComponent<SpriteBillboard>();
+            badgeBb.Mode = SpriteBillboard.BillboardMode.CameraAligned;
+
+            SpriteRenderer badgeSr = badgeObj.AddComponent<SpriteRenderer>();
+            badgeSr.sprite = badgeSprite;
+            badgeSr.sortingOrder = 10;
+
+            GameObject textObj = new GameObject("Text");
+            textObj.transform.SetParent(badgeObj.transform, false);
+            textObj.transform.localPosition = new Vector3(0.22f, 0.02f, -0.02f);
+            TextMesh tm = textObj.AddComponent<TextMesh>();
+            tm.characterSize = 0.16f;
+            tm.fontSize = 32;
+            tm.fontStyle = FontStyle.Bold;
+            tm.alignment = TextAlignment.Center;
+            tm.anchor = TextAnchor.MiddleCenter;
+            tm.color = new Color(0.2f, 0.12f, 0.08f, 1f);
+            tm.text = "3";
+
+            badgeObj.SetActive(false);
+
+            // 6. Unit 컴포넌트에 바인딩
             SerializedObject so = new SerializedObject(unitComp);
             so.FindProperty("_spriteRenderer").objectReferenceValue = spriteRenderer;
             so.FindProperty("_shadowRenderer").objectReferenceValue = shadowRenderer;
             so.FindProperty("_selectionIndicator").objectReferenceValue = ringObj;
             so.FindProperty("_billboard").objectReferenceValue = billboard;
+            so.FindProperty("_mobilityBadgeObj").objectReferenceValue = badgeObj;
+            so.FindProperty("_mobilityTextMesh").objectReferenceValue = tm;
+            so.FindProperty("_mobilityBadgeRenderer").objectReferenceValue = badgeSr;
             so.ApplyModifiedProperties();
 
-            // 6. 프리팹 에셋으로 저장
+            // 7. 프리팹 에셋으로 저장
             PrefabUtility.SaveAsPrefabAsset(rootObj, PrefabPath);
             Object.DestroyImmediate(rootObj);
 
